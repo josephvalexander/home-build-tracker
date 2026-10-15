@@ -122,6 +122,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .card-body.flush > :first-child { border-top: 0; }
 a.row-item:hover { background: #FAFAF7; color: var(--ink); }
+.exp-row { padding: 0 4px 0 0; gap: 0; }
+.ri-link { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 12px 8px 12px 16px; text-decoration: none; color: var(--ink); }
+.ri-link:hover { color: var(--ink); background: #FAFAF7; }
+.ri-del { color: var(--muted); }
+.ri-del:hover { color: var(--warn); background: var(--warn-soft); }
 .ri-main { flex: 1; min-width: 0; text-decoration: none; color: inherit; }
 .ri-main:hover { color: inherit; }
 .ri-title { font-weight: 500; display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -191,18 +196,21 @@ a.hero-label:hover { color: #fff; }
 .checklist li.done .ck { background: var(--green); border-color: var(--green); }
 .linkish { border: 0; background: none; padding: 0; color: var(--green); text-decoration: underline; cursor: pointer; text-align: left; font-size: 14px; }
 
-/* stage spend chart */
-.schart { display: flex; flex-direction: column; }
-.sc-row {
-  display: grid; grid-template-columns: minmax(0, 38%) minmax(0, 1fr) auto; align-items: center; gap: 10px;
-  min-height: 40px; padding: 4px 0; text-decoration: none; color: var(--ink); border-radius: 8px;
+/* stage spend chart: 100% stacked bar + legend */
+.sc-caption { font-size: 13px; color: var(--muted); margin: 2px 0 10px; }
+.stack { display: flex; gap: 2px; height: 30px; border-radius: 6px; overflow: hidden; margin-bottom: 12px; }
+.stack-seg { min-width: 4px; display: flex; align-items: center; justify-content: center; flex-basis: 0; flex-shrink: 1; }
+.stack-lbl { color: #fff; font: 600 12px var(--mono); text-shadow: 0 1px 2px rgba(0,0,0,.35); white-space: nowrap; }
+.stack-legend { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
+.sl-row {
+  display: grid; grid-template-columns: 12px minmax(0, 1fr) auto auto; align-items: center; gap: 10px;
+  min-height: 40px; padding: 0 6px; margin: 0 -6px; border-radius: 8px; color: var(--ink); text-decoration: none;
 }
-.sc-row:hover { color: var(--ink); background: #F7F6F2; }
-.sc-name { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sc-track { height: 14px; display: flex; align-items: center; border-left: 1px solid var(--border); }
-.sc-bar { display: block; height: 14px; background: var(--green); border-radius: 0 4px 4px 0; }
-.sc-row:hover .sc-bar { background: var(--green-dark); }
-.sc-val { font-size: 13px; font-weight: 600; min-width: 56px; text-align: right; }
+a.sl-row[href]:hover { background: #F7F6F2; color: var(--ink); }
+.sl-sw { width: 12px; height: 12px; border-radius: 3px; }
+.sl-name { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sl-pct { font-size: 14px; font-weight: 600; min-width: 44px; text-align: right; }
+.sl-amt { font-size: 13px; color: var(--muted); min-width: 60px; text-align: right; }
 .sc-foot { font-size: 12.5px; color: var(--muted); padding-top: 6px; }
 .chart-tip {
   position: fixed; left: 0; top: 0; z-index: 45; pointer-events: none; max-width: 260px;
@@ -421,8 +429,8 @@ code { font-family: var(--mono); font-size: 13px; }
   .kpi .kpi-v { font-size: 26px; }
   .kpi-s { font-size: 12.5px; color: var(--muted); }
   .stages-card { grid-column: span 2; }
-  .sc-row { grid-template-columns: minmax(0, 220px) minmax(0, 1fr) auto; min-height: 42px; }
-  .sc-name { font-size: 14px; }
+  .stack { height: 36px; }
+  .stack-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; }
   .topbar.compact .pill { width: auto; padding: 0 12px; }
   .topbar.compact .pill span { display: inline; }
   .recent-card { grid-column: span 2; }

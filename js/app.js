@@ -146,35 +146,53 @@ function expRow(e) {
   if (e.status === 'due') bits.push(e.dueDate ? 'due ' + relDate(e.dueDate) : 'due');
   else { if (e.mode) bits.push(e.mode); bits.push(relDate(e.date)); }
   const hasAtt = attsOf(e.id).length > 0;
-  return `<a class="row-item" href="#/expense/${e.id}">
-    <div class="ri-main">
-      <div class="ri-title">${esc(e.title || cat)}${hasAtt ? `<span class="ri-clip" title="Bill attached">${icon('clip', 14)}</span>` : ''}</div>
-      <div class="ri-meta">${esc(bits.join(' · '))}</div>
-    </div>
-    <div class="ri-amt num${e.status === 'due' ? ' is-due' : ''}">${money(e.amount)}</div>
-  </a>`;
+  return `<div class="row-item exp-row">
+    <a class="ri-link" href="#/expense/${e.id}">
+      <div class="ri-main">
+        <div class="ri-title">${esc(e.title || cat)}${hasAtt ? `<span class="ri-clip" title="Bill attached">${icon('clip', 14)}</span>` : ''}</div>
+        <div class="ri-meta">${esc(bits.join(' · '))}</div>
+      </div>
+      <div class="ri-amt num${e.status === 'due' ? ' is-due' : ''}">${money(e.amount)}</div>
+    </a>
+    <button type="button" class="icon-btn ri-del" data-del-exp="${e.id}" aria-label="Delete ${esc(e.title || cat)}, ${money(e.amount)}">${icon('trash', 18)}</button>
+  </div>`;
 }
 
-// Horizontal bar chart of paid spend per stage, in construction order.
+// Share of paid spend per stage: one 100% stacked bar + a legend with % and amount.
+// Colours follow the stage (construction order), never its rank; more than 8 → "Other".
+const SERIES = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
+const OTHER = '#8C918D';
+
 function stageChart(t) {
   const rows = S.stages.map(s => ({ id: s.id, name: s.name }));
-  if (t.stage._none) rows.push({ id: '_none', name: 'No stage' });
+  if (t.stage._none || t.stageDue._none) rows.push({ id: '_none', name: 'No stage' });
   for (const r of rows) { r.v = t.stage[r.id] || 0; r.due = t.stageDue[r.id] || 0; r.n = t.stageCount[r.id] || 0; }
-  const active = rows.filter(r => r.v > 0 || r.due > 0);
-  if (!active.length) return emptyBox('Spending per stage shows here once you add expenses.');
-  const idle = S.stages.length - active.filter(r => r.id !== '_none').length;
-  const max = Math.max(...active.map(r => r.v), 1);
-  return `<div class="schart" role="list" aria-label="Paid spend by stage">${active.map(r => {
-    const share = t.paid ? Math.round((r.v / t.paid) * 100) : 0;
-    const tip = [`Paid ${money(r.v)}`, `${share}% of all spend`, `${r.n} ${r.n === 1 ? 'entry' : 'entries'}`, r.due ? `Due ${money(r.due)}` : ''].filter(Boolean).join(' · ');
-    const w = r.v ? Math.max(1.5, (r.v / max) * 100) : 0;
-    return `<a class="sc-row" role="listitem" href="#/expenses?stage=${r.id}" data-name="${esc(r.name)}" data-tip="${esc(tip)}"
-        aria-label="${esc(r.name)}: ${esc(tip)}">
-      <span class="sc-name">${esc(r.name)}</span>
-      <span class="sc-track"><span class="sc-bar" style="width:${w}%"></span></span>
-      <span class="sc-val num">${moneyShort(r.v)}</span>
-    </a>`;
-  }).join('')}</div>${idle > 0 ? `<div class="sc-foot">${idle} stage${idle === 1 ? '' : 's'} with no spend yet</div>` : ''}`;
+  let active = rows.filter(r => r.v > 0);
+  if (!active.length) return emptyBox('Once you add paid expenses, this shows what share of the money went into each stage.');
+  if (active.length > SERIES.length) {
+    const keep = active.slice(0, SERIES.length - 1), rest = active.slice(SERIES.length - 1);
+    active = [...keep, { id: '', name: `Other (${rest.length} stages)`, v: rest.reduce((s, r) => s + r.v, 0), due: rest.reduce((s, r) => s + r.due, 0), n: rest.reduce((s, r) => s + r.n, 0), other: true }];
+  }
+  active.forEach((r, i) => {
+    r.color = r.other ? OTHER : SERIES[i];
+    r.share = (r.v / t.paid) * 100;
+    r.label = r.share >= 10 ? Math.round(r.share) + '%' : r.share >= 1 ? r.share.toFixed(1).replace(/\.0$/, '') + '%' : '<1%';
+    r.tip = [`Paid ${money(r.v)}`, `${r.label} of spend`, `${r.n} ${r.n === 1 ? 'entry' : 'entries'}`, r.due ? `Due ${money(r.due)}` : ''].filter(Boolean).join(' · ');
+  });
+  const idle = S.stages.filter(s => !(t.stage[s.id] > 0)).length;
+  const budgetLine = t.budget ? `<div class="sc-caption">${Math.round(pct(t.paid, t.budget))}% of your ${moneyShort(t.budget)} budget spent so far</div>` : '';
+  return `${budgetLine}
+    <div class="stack" role="img" aria-label="Share of spend by stage: ${esc(active.map(r => `${r.name} ${r.label}`).join(', '))}">
+      ${active.map(r => `<span class="stack-seg sc-row" style="flex-grow:${r.v};background:${r.color}" data-name="${esc(r.name)}" data-tip="${esc(r.tip)}">${r.share >= 12 ? `<span class="stack-lbl">${r.label}</span>` : ''}</span>`).join('')}
+    </div>
+    <ul class="stack-legend">${active.map(r => `<li>
+      <a class="sl-row sc-row" ${r.other ? '' : `href="#/expenses?stage=${r.id}"`} data-name="${esc(r.name)}" data-tip="${esc(r.tip)}">
+        <span class="sl-sw" style="background:${r.color}" aria-hidden="true"></span>
+        <span class="sl-name">${esc(r.name)}</span>
+        <span class="sl-pct num">${r.label}</span>
+        <span class="sl-amt num">${moneyShort(r.v)}</span>
+      </a></li>`).join('')}</ul>
+    ${idle > 0 ? `<div class="sc-foot">${idle} stage${idle === 1 ? '' : 's'} with no spend yet</div>` : ''}`;
 }
 
 function bindChartTips() {
@@ -191,6 +209,12 @@ function bindChartTips() {
     });
     row.addEventListener('pointerleave', () => { tipEl.hidden = true; });
   }
+}
+
+async function deleteExpense(id) {
+  await db.softDelete('expenses', id);
+  for (const a of attsOf(id)) { await db.softDelete('attachments', a.id); await db.hardDelete('blobs', a.id); }
+  await load();
 }
 
 const emptyBox = (text, link = '') => `<div class="empty">${text}${link}</div>`;
@@ -222,7 +246,7 @@ function renderHome() {
       <div class="kpi"><div class="kpi-l">Remaining</div><div class="kpi-v num ${remaining < 0 ? 'warn' : ''}">${moneyShort(remaining)}</div><div class="kpi-s">after paying dues</div></div>
     </section>
     <section class="card stages-card">
-      <div class="card-head"><h2>Spend by stage</h2><a href="#/budget">Edit stages</a></div>
+      <div class="card-head"><h2>Spend by stage</h2>${t.paid ? `<span class="num muted">${money(t.paid)}</span>` : ''}</div>
       <div class="card-body">${stageChart(t)}</div>
     </section>
     <section class="card cats-card">
@@ -458,9 +482,7 @@ function renderExpenseForm(params, id) {
 
   $('#f-delete')?.addEventListener('click', async () => {
     if (!confirm('Delete this expense? Attached bills will be removed too.')) return;
-    await db.softDelete('expenses', existing.id);
-    for (const a of attsOf(existing.id)) { await db.softDelete('attachments', a.id); await db.hardDelete('blobs', a.id); }
-    await load();
+    await deleteExpense(existing.id);
     ui.formOpen = false;
     toast('Expense deleted');
     goBack('#/expenses');
@@ -874,7 +896,17 @@ view.addEventListener('change', ev => {
   const el = ev.target.closest('[data-act]');
   if (el && el.tagName !== 'FORM' && el.tagName !== 'BUTTON' && actions[el.dataset.act]) actions[el.dataset.act](el);
 });
-view.addEventListener('click', ev => {
+view.addEventListener('click', async ev => {
+  const del = ev.target.closest('[data-del-exp]');
+  if (del) {
+    ev.preventDefault();
+    const e = R.expenses.get(del.dataset.delExp);
+    if (!e || !confirm(`Delete “${e.title || nameOf('categories', e.categoryId, 'this expense')}” (${money(e.amount)})?` + (attsOf(e.id).length ? ' Its bills will be removed too.' : ''))) return;
+    await deleteExpense(e.id);
+    toast('Expense deleted');
+    if (ui.path === '/expenses') renderExpenseResults(); else route();
+    return;
+  }
   const el = ev.target.closest('button[data-act]');
   if (el && actions[el.dataset.act]) actions[el.dataset.act](el);
 });
