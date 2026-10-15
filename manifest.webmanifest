@@ -1,0 +1,15 @@
+{
+  "name": "Home Build Tracker",
+  "short_name": "Home Build",
+  "description": "Track construction expenses for your new home.",
+  "start_url": "./#/",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F3F2EE",
+  "theme_color": "#1F6B4F",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

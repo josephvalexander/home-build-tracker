@@ -1,0 +1,44 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build site with a unique version stamp
+        run: |
+          BUILD="$(date -u +%Y.%m.%d)-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}"
+          echo "Build id: $BUILD"
+          mkdir _site
+          cp -r index.html manifest.webmanifest sw.js .nojekyll css js icons _site/
+          # Stamp the build id so every deploy is a new service worker
+          # (installed apps then update and refresh themselves).
+          sed -i "s/__BUILD__/${BUILD}/g" _site/sw.js _site/js/config.js
+          grep -q "${BUILD}" _site/sw.js
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
