@@ -819,7 +819,7 @@ function renderSettings() {
   ];
   const doneCount = steps.filter(s => s[0]).length;
   const welcome = doneCount === steps.length ? '' : `<section class="card form-card welcome">
-      <div class="row between"><h2 class="section-title">Welcome! Let’s set up your build</h2><span class="muted">${doneCount} of ${steps.length} done</span></div>
+      <div class="row between"><h2 class="section-title">Welcome! Let’s set up your build</h2><span class="muted nowrap">${doneCount} of ${steps.length} done</span></div>
       <ol class="checklist">${steps.map(([done, href, label]) => `<li class="${done ? 'done' : ''}">
         <span class="ck" aria-hidden="true">${done ? icon('check', 14, 3) : ''}</span>
         ${done ? `<span>${label}</span><span class="sr-only">(done)</span>`
@@ -830,6 +830,12 @@ function renderSettings() {
     </section>`;
   view.innerHTML = `<div class="settings-page">
     ${welcome}
+    <a class="card settings-link" href="#/budget">
+      <span class="sl-icon" aria-hidden="true">${icon('budget', 20)}</span>
+      <span class="sl-main"><span class="sl-title">Budget &amp; stages</span>
+        <span class="ri-meta">${S.settings.totalBudget ? 'Budget ' + money(S.settings.totalBudget) : 'Set your overall budget'} · ${S.stages.length} stages · categories</span></span>
+      <span aria-hidden="true" class="sl-chev">›</span>
+    </a>
     <section class="card form-card">
       <label class="field"><span>Project name</span><input data-act="project-name" maxlength="60" value="${esc(S.settings.projectName || '')}"></label>
     </section>
