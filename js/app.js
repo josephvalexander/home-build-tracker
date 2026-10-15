@@ -362,7 +362,8 @@ function renderExpenseForm(params, id) {
     <div class="amount-block">
       <label for="f-amount" class="amount-label">Amount</label>
       <div class="amount-wrap"><span class="rupee" aria-hidden="true">₹</span>
-        <input id="f-amount" name="amount" class="amount-input num" inputmode="decimal" autocomplete="off" placeholder="0" value="${paiseToInput(e.amount)}"></div>
+        <input id="f-amount" name="amount" class="amount-input num" inputmode="decimal" autocomplete="off" placeholder="0" value="${paiseToInput(e.amount)}" data-words="amt-words" aria-describedby="amt-words"></div>
+      <span class="amount-words" id="amt-words" aria-live="polite">${wordsLine(e.amount)}</span>
       <div class="segmented" role="radiogroup" aria-label="Status">
         <label><input type="radio" name="status" value="paid"${e.status === 'paid' ? ' checked' : ''}><span>Paid</span></label>
         <label><input type="radio" name="status" value="due"${e.status === 'due' ? ' checked' : ''}><span>Due later</span></label>
@@ -456,7 +457,7 @@ function renderExpenseForm(params, id) {
   const autoAmount = () => {
     if (amountTouched) return;
     const qty = parseFloat($('[name=qty]', form).value), rate = parseFloat($('[name=rate]', form).value);
-    if (qty > 0 && rate > 0) { amountEl.value = String(Math.round(qty * rate * 100) / 100); fitAmount(); }
+    if (qty > 0 && rate > 0) { amountEl.value = String(Math.round(qty * rate * 100) / 100); fitAmount(); $('#amt-words').innerHTML = wordsLine(toPaise(amountEl.value)); }
   };
   $('[name=qty]', form).addEventListener('input', autoAmount);
   $('[name=rate]', form).addEventListener('input', autoAmount);
@@ -662,7 +663,8 @@ function renderVendorForm(params, id) {
       <label class="field"><span>Name</span><input name="name" required maxlength="80" value="${esc(v.name)}" placeholder="e.g. Joseph & Sons Masonry"></label>
       <label class="field"><span>Trade / supplies</span><input name="trade" maxlength="60" value="${esc(v.trade)}" placeholder="e.g. Mason contractor, Cement supplier"></label>
       <label class="field"><span>Phone</span><input name="phone" type="tel" maxlength="20" value="${esc(v.phone)}" placeholder="Optional"></label>
-      <label class="field"><span>Agreed contract amount</span><input name="agreed" inputmode="decimal" value="${paiseToInput(v.agreed)}" placeholder="Optional — for contractors">
+      <label class="field"><span>Agreed contract amount</span><input name="agreed" inputmode="decimal" value="${paiseToInput(v.agreed)}" placeholder="Optional — for contractors" data-words aria-describedby="agreed-words">
+        <span class="amount-words" id="agreed-words" aria-live="polite">${wordsLine(v.agreed)}</span>
         <small>Leave blank for shops you pay per bill.</small></label>
       <label class="field"><span>Notes</span><textarea name="notes" rows="2" maxlength="1000" placeholder="Scope, terms, bank details…">${esc(v.notes)}</textarea></label>
     </div>
@@ -923,7 +925,7 @@ function wordsLine(paise) {
 view.addEventListener('input', ev => {
   const el = ev.target.closest('input[data-words]');
   if (!el) return;
-  const out = el.parentElement.querySelector('.amount-words');
+  const out = el.dataset.words ? document.getElementById(el.dataset.words) : el.parentElement.querySelector('.amount-words');
   if (out) out.innerHTML = wordsLine(toPaise(el.value));
 });
 view.addEventListener('keydown', ev => {

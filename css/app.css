@@ -265,6 +265,7 @@ a.sl-row[href]:hover { background: #F7F6F2; color: var(--ink); }
 .field small { color: var(--muted); font-size: 12.5px; }
 .field > span.amount-words { font-size: 14px; font-weight: 400; color: var(--green-dark); min-height: 20px; }
 .amount-words strong { font-weight: 600; }
+.amount-block .amount-words { font-size: 14px; color: var(--green-dark); min-height: 20px; margin-top: -4px; }
 .field input, .field textarea, .add-row input, .edit-row input, .ms-edit input {
   width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); font-size: 16px;
 }
