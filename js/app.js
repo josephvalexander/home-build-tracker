@@ -63,17 +63,18 @@ const attsOf = expenseId => S.attachments.filter(a => a.expenseId === expenseId)
 
 function totals() {
   const add = (m, k, v) => { if (k) m[k] = (m[k] || 0) + v; };
-  const t = { paid: 0, due: 0, stage: {}, cat: {}, vendor: {}, vendorDue: {}, ms: {} };
+  const t = { paid: 0, due: 0, stage: {}, stageDue: {}, stageCount: {}, cat: {}, vendor: {}, vendorDue: {}, ms: {} };
+  const stageKey = e => (e.stageId && R.stages.get(e.stageId) && !R.stages.get(e.stageId).deleted ? e.stageId : '_none');
   for (const e of S.expenses) {
-    if (e.status === 'due') { t.due += e.amount; add(t.vendorDue, e.vendorId, e.amount); continue; }
+    add(t.stageCount, stageKey(e), 1);
+    if (e.status === 'due') { t.due += e.amount; add(t.vendorDue, e.vendorId, e.amount); add(t.stageDue, stageKey(e), e.amount); continue; }
     t.paid += e.amount;
-    add(t.stage, e.stageId, e.amount);
+    add(t.stage, stageKey(e), e.amount);
     add(t.cat, e.categoryId || '_none', e.amount);
     add(t.vendor, e.vendorId, e.amount);
     add(t.ms, e.milestoneId, e.amount);
   }
-  t.stageBudget = S.stages.reduce((s, x) => s + (x.budget || 0), 0);
-  t.budget = S.settings.totalBudget || t.stageBudget;
+  t.budget = S.settings.totalBudget || 0;
   return t;
 }
 
@@ -154,15 +155,42 @@ function expRow(e) {
   </a>`;
 }
 
-function stageRow(s, t) {
-  const spent = t.stage[s.id] || 0;
-  const over = s.budget > 0 && spent > s.budget;
-  const width = s.budget > 0 ? pct(spent, s.budget) : (spent ? 100 : 0);
-  return `<div class="stage-row${!s.budget && !spent ? ' idle' : ''}">
-    <div class="row between"><span class="sr-name">${esc(s.name)}</span>
-      <span class="num sr-fig${over ? ' over' : ''}">${moneyShort(spent)}${s.budget ? ' / ' + moneyShort(s.budget) : ''}</span></div>
-    <div class="bar"><span class="${over ? 'over' : 'paid'}" style="width:${width}%"></span></div>
-  </div>`;
+// Horizontal bar chart of paid spend per stage, in construction order.
+function stageChart(t) {
+  const rows = S.stages.map(s => ({ id: s.id, name: s.name }));
+  if (t.stage._none) rows.push({ id: '_none', name: 'No stage' });
+  for (const r of rows) { r.v = t.stage[r.id] || 0; r.due = t.stageDue[r.id] || 0; r.n = t.stageCount[r.id] || 0; }
+  const active = rows.filter(r => r.v > 0 || r.due > 0);
+  if (!active.length) return emptyBox('Spending per stage shows here once you add expenses.');
+  const idle = S.stages.length - active.filter(r => r.id !== '_none').length;
+  const max = Math.max(...active.map(r => r.v), 1);
+  return `<div class="schart" role="list" aria-label="Paid spend by stage">${active.map(r => {
+    const share = t.paid ? Math.round((r.v / t.paid) * 100) : 0;
+    const tip = [`Paid ${money(r.v)}`, `${share}% of all spend`, `${r.n} ${r.n === 1 ? 'entry' : 'entries'}`, r.due ? `Due ${money(r.due)}` : ''].filter(Boolean).join(' · ');
+    const w = r.v ? Math.max(1.5, (r.v / max) * 100) : 0;
+    return `<a class="sc-row" role="listitem" href="#/expenses?stage=${r.id}" data-name="${esc(r.name)}" data-tip="${esc(tip)}"
+        aria-label="${esc(r.name)}: ${esc(tip)}">
+      <span class="sc-name">${esc(r.name)}</span>
+      <span class="sc-track"><span class="sc-bar" style="width:${w}%"></span></span>
+      <span class="sc-val num">${moneyShort(r.v)}</span>
+    </a>`;
+  }).join('')}</div>${idle > 0 ? `<div class="sc-foot">${idle} stage${idle === 1 ? '' : 's'} with no spend yet</div>` : ''}`;
+}
+
+function bindChartTips() {
+  const tipEl = $('#chart-tip');
+  if (!tipEl || !matchMedia('(hover: hover)').matches) return;
+  for (const row of $$('.sc-row', view)) {
+    row.addEventListener('pointerenter', () => {
+      tipEl.innerHTML = `<strong>${esc(row.dataset.name)}</strong><span>${esc(row.dataset.tip)}</span>`;
+      tipEl.hidden = false;
+    });
+    row.addEventListener('pointermove', ev => {
+      const x = Math.min(ev.clientX + 14, innerWidth - tipEl.offsetWidth - 8);
+      tipEl.style.transform = `translate(${x}px, ${ev.clientY + 16}px)`;
+    });
+    row.addEventListener('pointerleave', () => { tipEl.hidden = true; });
+  }
 }
 
 const emptyBox = (text, link = '') => `<div class="empty">${text}${link}</div>`;
@@ -179,18 +207,7 @@ function renderHome() {
   if (t.cat._none) cats.push({ c: { name: 'Uncategorised' }, v: t.cat._none });
   const maxCat = Math.max(1, ...cats.map(x => x.v));
 
-  const welcome = S.expenses.length ? '' : `
-    <section class="card welcome span-all">
-      <h2>Welcome! Let's set up your build</h2>
-      <ol>
-        <li><a href="#/budget">Set your total budget and stage budgets</a></li>
-        <li><a href="#/add">Add your first expense</a></li>
-        <li><a href="#/settings">Connect Google Drive</a> so your data is backed up and shows on your desktop</li>
-      </ol>
-    </section>`;
-
   view.innerHTML = `<div class="home">
-    ${welcome}
     <section class="hero">
       <div class="row between"><span class="hero-label">Spent so far</span>
         <a class="hero-label" href="#/budget">${t.budget ? 'Budget ' + money(t.budget) : 'Set budget'}</a></div>
@@ -199,14 +216,14 @@ function renderHome() {
       <div class="legend"><span><i class="sw sw-paid"></i>Paid ${Math.round(paidPct)}%</span>${t.due ? `<span><i class="sw sw-due"></i>Due ${money(t.due)}</span>` : ''}</div>
     </section>
     <section class="kpis">
-      <div class="kpi"><div class="kpi-l">Total budget</div><div class="kpi-v num">${moneyShort(t.budget)}</div><div class="kpi-s">${S.settings.totalBudget ? 'Set manually' : 'Sum of stage budgets'}</div></div>
+      <div class="kpi"><div class="kpi-l">Total budget</div><div class="kpi-v num">${moneyShort(t.budget)}</div><div class="kpi-s">${t.budget ? 'Overall budget' : '<a href="#/budget">Set your budget</a>'}</div></div>
       <div class="kpi"><div class="kpi-l">Spent</div><div class="kpi-v num ok">${moneyShort(t.paid)}</div><div class="kpi-s">${t.budget ? Math.round(paidPct) + '% of budget' : `${S.expenses.length} entries`}</div></div>
       <div class="kpi"><div class="kpi-l">Due to vendors</div><div class="kpi-v num ${t.due ? 'warn' : ''}">${moneyShort(t.due)}</div><div class="kpi-s">${dues.length} pending</div></div>
       <div class="kpi"><div class="kpi-l">Remaining</div><div class="kpi-v num ${remaining < 0 ? 'warn' : ''}">${moneyShort(remaining)}</div><div class="kpi-s">after paying dues</div></div>
     </section>
-    <section class="card stages-card${S.stages.some(s => s.budget || t.stage[s.id]) ? ' has-active' : ''}">
-      <div class="card-head"><h2>Stages</h2><a href="#/budget">Edit budgets</a></div>
-      <div class="card-body">${S.stages.length ? S.stages.map(s => stageRow(s, t)).join('') : emptyBox('No stages yet.', ' <a href="#/budget">Add stages</a>')}</div>
+    <section class="card stages-card">
+      <div class="card-head"><h2>Spend by stage</h2><a href="#/budget">Edit stages</a></div>
+      <div class="card-body">${stageChart(t)}</div>
     </section>
     <section class="card cats-card">
       <div class="card-head"><h2>By category</h2></div>
@@ -232,21 +249,23 @@ function renderHome() {
       <div class="card-body flush">${S.expenses.length ? S.expenses.slice(0, 6).map(expRow).join('') : emptyBox('No expenses yet.', ' <a href="#/add">Add one</a>')}</div>
     </section>
   </div>`;
+  bindChartTips();
 }
 
 /* ---------- Expenses list ---------- */
 function filteredExpenses() {
   const f = ui.filters, q = f.q.trim().toLowerCase();
   return S.expenses.filter(e =>
-    (!f.stage || e.stageId === f.stage) &&
+    (!f.stage || (f.stage === '_none' ? !(e.stageId && R.stages.get(e.stageId) && !R.stages.get(e.stageId).deleted) : e.stageId === f.stage)) &&
     (!f.category || e.categoryId === f.category) &&
     (!f.vendor || e.vendorId === f.vendor) &&
     (!f.status || e.status === f.status) &&
     (!q || [e.title, e.notes, nameOf('vendors', e.vendorId), nameOf('categories', e.categoryId)].join(' ').toLowerCase().includes(q)));
 }
 
-function renderExpenses() {
+function renderExpenses(params) {
   setHeader('Expenses');
+  if (params?.has('stage')) { ui.filters = { q: '', stage: params.get('stage'), category: '', vendor: '', status: '' }; history.replaceState(null, '', '#/expenses'); }
   const f = ui.filters;
   const opt = (arr, sel) => arr.map(x => `<option value="${x.id}"${x.id === sel ? ' selected' : ''}>${esc(x.name)}</option>`).join('');
   view.innerHTML = `
@@ -254,7 +273,7 @@ function renderExpenses() {
       <label class="search"><span class="sr-only">Search</span>${icon('search', 18)}
         <input type="search" name="q" placeholder="Search title, vendor, notes" value="${esc(f.q)}" autocomplete="off"></label>
       <div class="filter-selects">
-        <label><span class="sr-only">Stage</span><select name="stage"><option value="">All stages</option>${opt(S.stages, f.stage)}</select></label>
+        <label><span class="sr-only">Stage</span><select name="stage"><option value="">All stages</option>${opt(S.stages, f.stage)}<option value="_none"${f.stage === '_none' ? ' selected' : ''}>No stage</option></select></label>
         <label><span class="sr-only">Category</span><select name="category"><option value="">All categories</option>${opt(S.categories, f.category)}</select></label>
         <label><span class="sr-only">Vendor</span><select name="vendor"><option value="">All vendors</option>${opt(S.vendors, f.vendor)}</select></label>
         <label><span class="sr-only">Status</span><select name="status"><option value="">Paid & due</option>
@@ -361,8 +380,12 @@ function renderExpenseForm(params, id) {
       <label class="field"><span>Notes</span><textarea name="notes" rows="2" maxlength="1000" placeholder="Optional">${esc(e.notes || '')}</textarea></label>
       <div class="field"><span class="field-label">Bills &amp; receipts</span>
         <div class="atts" id="atts"></div>
-        <label class="add-att">${icon('camera')}<span>Add bill photo or PDF</span>
-          <input type="file" id="f-file" accept="image/*,application/pdf" multiple class="sr-only"></label>
+        <div class="att-buttons">
+          <label class="add-att camera-only">${icon('camera')}<span>Take photo</span>
+            <input type="file" id="f-camera" accept="image/*" capture="environment" class="sr-only"></label>
+          <label class="add-att">${icon('file')}<span>Upload photo or PDF</span>
+            <input type="file" id="f-file" accept="image/*,application/pdf" multiple class="sr-only"></label>
+        </div>
       </div>
     </div>
 
@@ -414,7 +437,7 @@ function renderExpenseForm(params, id) {
   $('[name=qty]', form).addEventListener('input', autoAmount);
   $('[name=rate]', form).addEventListener('input', autoAmount);
 
-  $('#f-file').addEventListener('change', async ev => {
+  const onFiles = async ev => {
     for (const file of ev.target.files) {
       if (file.size > 15 * 1024 * 1024) { toast(`${file.name} is over 15 MB — skipped`); continue; }
       const blob = await compressImage(file);
@@ -422,7 +445,9 @@ function renderExpenseForm(params, id) {
     }
     ev.target.value = '';
     renderAtts();
-  });
+  };
+  $('#f-file').addEventListener('change', onFiles);
+  $('#f-camera').addEventListener('change', onFiles);
 
   form.addEventListener('click', ev => {
     const v = ev.target.closest('[data-view]'), r = ev.target.closest('[data-remove]'), p = ev.target.closest('[data-pending]');
@@ -683,11 +708,11 @@ function renderBudget() {
   view.innerHTML = `<div class="budget-page">
     <section class="card form-card">
       <label class="field"><span>Total budget</span>
-        <input data-act="total-budget" inputmode="decimal" placeholder="${t.stageBudget ? paiseToInput(t.stageBudget) : 'e.g. 4500000'}" value="${paiseToInput(S.settings.totalBudget)}">
-        <small>${S.settings.totalBudget ? `Stage budgets add up to ${money(t.stageBudget)}.` : `Leave blank to use the sum of stage budgets${t.stageBudget ? ` (${money(t.stageBudget)})` : ''}.`}</small></label>
+        <input data-act="total-budget" inputmode="decimal" placeholder="e.g. 4500000" value="${paiseToInput(S.settings.totalBudget)}">
+        <small>${t.budget ? `Spent ${money(t.paid)} so far (${Math.round(pct(t.paid, t.budget))}%).` : 'Your overall budget for the whole build, in rupees.'}</small></label>
     </section>
     <section class="card">
-      <div class="card-head"><h2>Stages</h2><span class="muted">Budget</span></div>
+      <div class="card-head"><h2>Stages</h2></div>
       <div class="card-body">
         ${S.stages.map((s, i) => `<div class="edit-row">
           <div class="er-reorder">
@@ -696,9 +721,8 @@ function renderBudget() {
           </div>
           <div class="er-main">
             <label><span class="sr-only">Stage name</span><input data-act="stage-name" data-id="${s.id}" value="${esc(s.name)}" maxlength="60"></label>
-            <div class="ri-meta">Spent ${money(t.stage[s.id] || 0)}${s.budget && (t.stage[s.id] || 0) > s.budget ? ' · <span class="overdue">over budget</span>' : ''}</div>
+            <div class="ri-meta">Spent ${money(t.stage[s.id] || 0)} · ${usage('stageId', s.id)} entries</div>
           </div>
-          <label class="er-budget"><span class="sr-only">Budget for ${esc(s.name)}</span><input data-act="stage-budget" data-id="${s.id}" inputmode="decimal" placeholder="₹ 0" value="${paiseToInput(s.budget)}"></label>
           <button type="button" class="icon-btn" data-act="stage-del" data-id="${s.id}" data-n="${usage('stageId', s.id)}" aria-label="Delete ${esc(s.name)}">${icon('trash', 18)}</button>
         </div>`).join('')}
         <form class="add-row" data-act="stage-add"><label><span class="sr-only">New stage name</span><input name="name" placeholder="Add a stage" maxlength="60"></label><button class="btn small" type="submit">${icon('plus', 18)} Add</button></form>
@@ -728,7 +752,6 @@ async function saveSettings(patch) {
 const budgetActions = {
   async 'total-budget'(el) { await saveSettings({ totalBudget: toPaise(el.value) }); renderBudget(); },
   async 'stage-name'(el) { const s = R.stages.get(el.dataset.id); const n = el.value.trim(); if (!n) { el.value = s.name; return; } await db.put('stages', { ...s, name: n }); await load(); },
-  async 'stage-budget'(el) { const s = R.stages.get(el.dataset.id); await db.put('stages', { ...s, budget: toPaise(el.value) }); await load(); renderBudget(); },
   async 'cat-name'(el) { const c = R.categories.get(el.dataset.id); const n = el.value.trim(); if (!n) { el.value = c.name; return; } await db.put('categories', { ...c, name: n }); await load(); },
   async 'stage-move'(el) {
     const i = S.stages.findIndex(s => s.id === el.dataset.id), j = i + Number(el.dataset.dir);
@@ -788,7 +811,25 @@ function renderSettings() {
         <button type="button" class="btn small" data-act="disconnect">Disconnect</button>
       </div>`;
   }
+  const steps = [
+    [!!S.settings.totalBudget, '#/budget', 'Set your overall budget'],
+    [S.expenses.length > 0, '#/add', 'Add your first expense'],
+    [connected, '', 'Connect Google Drive so your data is backed up and shows on your desktop'],
+    [!!standalone, 'scroll', 'Install the app on your home screen'],
+  ];
+  const doneCount = steps.filter(s => s[0]).length;
+  const welcome = doneCount === steps.length ? '' : `<section class="card form-card welcome">
+      <div class="row between"><h2 class="section-title">Welcome! Let’s set up your build</h2><span class="muted">${doneCount} of ${steps.length} done</span></div>
+      <ol class="checklist">${steps.map(([done, href, label]) => `<li class="${done ? 'done' : ''}">
+        <span class="ck" aria-hidden="true">${done ? icon('check', 14, 3) : ''}</span>
+        ${done ? `<span>${label}</span><span class="sr-only">(done)</span>`
+          : href === 'scroll' ? `<button type="button" class="linkish" data-act="scroll-install">${label}</button>`
+          : href ? `<a href="${href}">${label}</a>`
+          : drive.isConfigured() ? `<button type="button" class="linkish" data-act="connect">${label}</button>` : `<span>${label}</span>`}
+      </li>`).join('')}</ol>
+    </section>`;
   view.innerHTML = `<div class="settings-page">
+    ${welcome}
     <section class="card form-card">
       <label class="field"><span>Project name</span><input data-act="project-name" maxlength="60" value="${esc(S.settings.projectName || '')}"></label>
     </section>
@@ -796,7 +837,7 @@ function renderSettings() {
       <h2 class="section-title">Google Drive backup &amp; sync</h2>
       ${driveBody}
     </section>
-    ${!standalone ? `<section class="card form-card">
+    ${!standalone ? `<section class="card form-card" id="install">
       <h2 class="section-title">Install the app</h2>
       ${ios ? `<p>In Safari, tap the Share button, then <strong>Add to Home Screen</strong>. Use it from the home screen icon — iPhone keeps an installed app’s data safe, but may clear a website’s storage after a few weeks unused.</p>`
         : `<p>In Chrome or Edge, use the install icon in the address bar (or menu › <strong>Install app</strong>) to open it in its own window.</p>`}
@@ -812,6 +853,7 @@ function renderSettings() {
 const settingsActions = {
   async 'project-name'(el) { const n = el.value.trim(); if (!n) return; await saveSettings({ projectName: n }); setHeader('Settings'); },
   connect() { drive.signIn(); },
+  'scroll-install'() { $('#install')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
   reconnect() { drive.signIn({ silent: true }); },
   'sync-now'() { doSync(); },
   async disconnect() {
@@ -908,8 +950,9 @@ function registerSW() {
     setInterval(check, 15 * 60 * 1000);
   }).catch(() => {});
   let reloading = false;
+  const hadController = !!navigator.serviceWorker.controller; // first install isn't an update
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (reloading) return;
+    if (reloading || !hadController) return;
     reloading = true;
     sessionStorage.setItem('hbt.updated', '1');
     location.reload();
@@ -918,6 +961,7 @@ function registerSW() {
 
 /* ---------- start ---------- */
 async function init() {
+  if (matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0) document.documentElement.classList.add('touch');
   const auth = drive.handleRedirect();
   await db.seed();
   await load();
