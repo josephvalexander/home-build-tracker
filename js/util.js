@@ -57,3 +57,14 @@ export function debounce(fn, ms) {
   let t;
   return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
+
+// Indian-style amount in words for big numbers: "45 lakhs", "1.2 crore", "75 thousand".
+export function amountInWords(paise) {
+  const r = Math.round((paise || 0) / 100);
+  if (r <= 0) return '';
+  const trim = (n, d) => String(Number(n.toFixed(d)));
+  if (r >= 1e7) return `${trim(r / 1e7, 2)} crore`;
+  if (r >= 1e5) { const v = trim(r / 1e5, 2); return `${v} ${v === '1' ? 'lakh' : 'lakhs'}`; }
+  if (r >= 1e3) return `${trim(r / 1e3, 1)} thousand`;
+  return `${r} rupees`;
+}

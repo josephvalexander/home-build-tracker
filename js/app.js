@@ -3,7 +3,7 @@ import * as drive from './drive.js';
 import { CONFIG } from './config.js';
 import {
   uid, esc, money, moneyShort, toPaise, paiseToInput, fmtNum, todayISO, fmtDate, relDate,
-  daysFromToday, monthLabel, debounce,
+  daysFromToday, monthLabel, debounce, amountInWords,
 } from './util.js';
 
 /* ---------- icons (inline stroke SVG) ---------- */
@@ -730,7 +730,8 @@ function renderBudget() {
   view.innerHTML = `<div class="budget-page">
     <section class="card form-card">
       <label class="field"><span>Total budget</span>
-        <input data-act="total-budget" inputmode="decimal" placeholder="e.g. 4500000" value="${paiseToInput(S.settings.totalBudget)}">
+        <input data-act="total-budget" data-words inputmode="decimal" placeholder="e.g. 4500000" value="${paiseToInput(S.settings.totalBudget)}" aria-describedby="budget-words">
+        <span class="amount-words" id="budget-words" aria-live="polite">${wordsLine(S.settings.totalBudget)}</span>
         <small>${t.budget ? `Spent ${money(t.paid)} so far (${Math.round(pct(t.paid, t.budget))}%).` : 'Your overall budget for the whole build, in rupees.'}</small></label>
     </section>
     <section class="card">
@@ -913,6 +914,17 @@ view.addEventListener('click', async ev => {
 view.addEventListener('submit', ev => {
   const f = ev.target.closest('form[data-act]');
   if (f && actions[f.dataset.act]) { ev.preventDefault(); actions[f.dataset.act](f); }
+});
+// Live "₹45,00,000 · 45 lakhs" hint under big-amount inputs.
+function wordsLine(paise) {
+  const w = amountInWords(paise);
+  return w ? `${money(paise)} · <strong>${w}</strong>` : '';
+}
+view.addEventListener('input', ev => {
+  const el = ev.target.closest('input[data-words]');
+  if (!el) return;
+  const out = el.parentElement.querySelector('.amount-words');
+  if (out) out.innerHTML = wordsLine(toPaise(el.value));
 });
 view.addEventListener('keydown', ev => {
   if (ev.key === 'Enter' && ev.target.matches('input[data-act]')) ev.target.blur();
